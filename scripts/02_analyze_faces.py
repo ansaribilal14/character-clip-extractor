@@ -16,6 +16,7 @@ REFS = f'{BASE}/references/refs_summary.json'
 OUT = f'{BASE}/output/analysis/analysis.jsonl'
 FPS_SAMPLE = 2.0
 DET_SIZE = (640, 640)
+PROC_W = int(os.environ.get('CCE_PROC_W', '1280'))  # processing width (1080p-safe)
 MATCH_THRESHOLD = 0.42   # cos to member centroid; centroids separated by >=0.72
 
 summary = json.load(open(REFS))
@@ -56,7 +57,7 @@ while True:
         if not ok:
             break
         t = idx / src_fps
-        scale = 960.0 / frame.shape[1] if frame.shape[1] > 960 else 1.0
+        scale = PROC_W / frame.shape[1] if frame.shape[1] > PROC_W else 1.0
         proc = cv2.resize(frame, (int(frame.shape[1]*scale), int(frame.shape[0]*scale))) if scale != 1.0 else frame
         faces = app.get(proc)
         rec_faces = []

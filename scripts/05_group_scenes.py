@@ -34,6 +34,17 @@ SAMPLE_STEP = 0.5
 raw = json.load(open(f'{AN}/raw_visibility.json'))
 shots_doc = json.load(open(f'{AN}/shots.json'))
 shots = shots_doc['shots']
+# actual normalized-video width (position stats must be resolution-aware)
+def _vw():
+    try:
+        import subprocess
+        out = subprocess.check_output(['ffprobe', '-v', 'quiet', '-print_format', 'json',
+                                       '-select_streams', 'v:0', '-show_streams',
+                                       f'{AN}/normalized.mp4'], text=True)
+        return float(json.loads(out)['streams'][0]['width'])
+    except Exception:
+        return 1280.0
+VW = _vw()
 audio = json.load(open(f'{AN}/audio_activity.json')) if os.path.exists(f'{AN}/audio_activity.json') else None
 cap_doc = json.load(open(f'{AN}/captions.json')) if os.path.exists(f'{AN}/captions.json') else None
 recs = [json.loads(l) for l in open(f'{AN}/analysis.jsonl')]
@@ -76,8 +87,7 @@ def side_stats(ivl, side):
                 sizes.append(y2 - y1)
             elif f['member'] != 'unknown':
                 others.add(f['member'])
-    W = 1280.0
-    return centers, sizes, others, W
+    return centers, sizes, others, VW
 
 def merge_evidence(a, b):
     ev = {}

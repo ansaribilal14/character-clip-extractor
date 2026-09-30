@@ -29,6 +29,7 @@ PIPELINE = [
     ('06b_contact_sheet.py', 'SHEET_OK'),
     ('07_qc.py', 'QC_OK'),
     ('08_reports.py', 'REPORTS_OK'),
+    ('10_concat_full.py', 'FULL_VIDEO_OK'),
 ]
 
 
@@ -61,11 +62,11 @@ def run_step(script, env, expect=None, timeout=3600):
 
 
 def run_pipeline(base, target, video_id, video_url, pad=5.0,
-                 skip_analysis=False, step_timeout=3600):
+                 skip_analysis=False, step_timeout=3600, maxh=1080):
     env = dict(os.environ)
     env.update({'CCE_BASE': base, 'CCE_TARGET': target,
                 'CCE_VIDEO_ID': video_id, 'CCE_VIDEO_URL': video_url,
-                'CCE_PAD': str(pad)})
+                'CCE_PAD': str(pad), 'CCE_MAXH': str(maxh)})
     os.makedirs(os.path.join(base, 'output', 'analysis'), exist_ok=True)
     os.makedirs(os.path.join(base, 'output', 'reports'), exist_ok=True)
 

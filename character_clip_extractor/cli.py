@@ -45,8 +45,8 @@ def main(argv=None):
     ap.add_argument('--out', default=os.path.join(REPO, 'workspaces', 'default'),
                     help='workspace directory (default: <repo>/workspaces/default)')
     ap.add_argument('--pad', type=float, default=5.0, help='padding seconds around scenes (default 5)')
-    ap.add_argument('--max-height', type=int, default=720,
-                    help='max download height (default 720; higher needs more disk/CPU)')
+    ap.add_argument('--max-height', type=int, default=1080,
+                    help='max download height (default 1080; falls back to best available)')
     ap.add_argument('--skip-analysis', action='store_true',
                     help='reuse existing analysis outputs in the workspace (resume)')
     ap.add_argument('--force-download', action='store_true',
@@ -98,9 +98,9 @@ def main(argv=None):
             subprocess.run([sys.executable, os.path.join(runner.SCRIPTS, '00_normalize.py'), src],
                            env=env, check=True)
 
-    # 3) pipeline
+    # 3) pipeline (ends with the FULL per-episode video via 10_concat_full)
     runner.run_pipeline(base, target, vid, video_url, pad=args.pad,
-                        skip_analysis=args.skip_analysis)
+                        skip_analysis=args.skip_analysis, maxh=args.max_height)
 
     # 4) zip
     zip_path = None

@@ -1,5 +1,8 @@
-"""Normalize source video to 720p H.264/AAC mp4 (uniform for analysis + export).
+"""Normalize source video (uniform for analysis + export).
 
+Quality-first: keep native resolution up to CCE_MAXH (default 1080).
+- H.264+AAC mp4 source  -> lossless remux (zero generational loss)
+- otherwise             -> one CRF 18 re-encode, height capped at CCE_MAXH
 Usage: python3 00_normalize.py <source_file>
 Output: output/analysis/normalized.mp4
 """
@@ -28,18 +31,18 @@ def main(src):
     dur = float(info['format']['duration'])
     print(f"IN dur={dur:.1f}s {v['codec_name'] if v else '?'} {v.get('width')}x{v.get('height') if v else ''} audio={'yes' if a else 'no'}")
 
-    # Best-quality strategy: if source is already <=720p H.264+AAC in mp4,
-    # lossless remux (zero generational loss); otherwise re-encode once at CRF 18.
+    # Best-quality strategy: keep native resolution up to CCE_MAXH.
+    MAXH = int(os.environ.get('CCE_MAXH', '1080'))
     ok_container = src.lower().endswith(('.mp4', '.mov', '.m4v'))
-    ok_v = v and v['codec_name'] == 'h264' and int(v.get('height', 0)) <= 720
+    ok_v = v and v['codec_name'] == 'h264' and int(v.get('height', 0)) <= MAXH
     ok_a = a and a['codec_name'] == 'aac'
     if ok_container and ok_v and ok_a:
-        print('REMUX (lossless, source already <=720p h264/aac)')
+        print(f'REMUX (lossless, source h264/aac height<={MAXH})')
         cmd = ['ffmpeg', '-y', '-i', src, '-c', 'copy', '-movflags', '+faststart', OUT]
         subprocess.run(cmd, check=True, capture_output=True)
     else:
-        print('RE-ENCODE (source not <=720p h264/aac) at crf 18')
-        vf = 'scale=-2:min(720\\,ih):flags=bicubic,format=yuv420p'
+        print(f'RE-ENCODE at crf 18 (height capped {MAXH})')
+        vf = f'scale=-2:min({MAXH}\\,ih):flags=bicubic,format=yuv420p'
         cmd = ['ffmpeg', '-y', '-i', src, '-vf', vf,
                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
                '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', OUT]
