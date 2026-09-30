@@ -1,0 +1,10 @@
+# CPU-only pipeline deps (Python 3.10+)
+numpy
+opencv-python
+insightface
+onnxruntime
+scenedetect>=0.7
+yt-dlp
+ytagent-cli        # bilal140202/ytagent — inbuilt download engine (MIT)
+requests
+# system deps: ffmpeg/ffprobe on PATH

@@ -1,0 +1,16 @@
+# heavy artifacts never belong in git
+output/
+workspaces/
+refs_raw/
+frames/
+dist/
+*.mp4
+*.mkv
+*.webm
+!references/**/*.jpg
+__pycache__/
+*.pyc
+.insightface/
+models/
+*.log
+.DS_Store

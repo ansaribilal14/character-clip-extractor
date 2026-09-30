@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "character-clip-extractor"
+version = "0.2.0"
+description = "Character-centric video clip extractor: video link + character name/photo -> scene-continuous clips (ZIP, best quality). Inbuilt ytagent downloader, CPU-only face pipeline."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+  "numpy",
+  "opencv-python",
+  "insightface",
+  "onnxruntime",
+  "scenedetect>=0.7",
+  "yt-dlp",
+  "ytagent-cli",
+  "requests",
+]
+
+[project.scripts]
+character-clip-extractor = "character_clip_extractor.cli:main"
+
+[tool.setuptools]
+packages = ["character_clip_extractor"]
