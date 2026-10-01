@@ -32,9 +32,12 @@ def ensure_ytagent_cli():
 
 
 def pot_alive():
+    """Provider answers on :4416 with ANY status (it returns 400 for GET /)."""
     try:
         with urllib.request.urlopen(f'{POT_URL}/', timeout=3) as r:
-            return r.status == 200
+            return r.status in (200, 400)
+    except urllib.error.HTTPError:
+        return True          # any HTTP response means the server is up
     except Exception:
         return False
 

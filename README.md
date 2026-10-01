@@ -1,95 +1,182 @@
-# Character Clip Extractor
+# character-clip-extractor
 
-Turn a **video link + a character** (name or reference photos) into **scene-continuous
-clips** of that character — at the **best available quality**, packaged as a **ZIP**.
+[![Version](https://img.shields.io/badge/version-0.3.0-blue)](CHANGELOG.md)
+[![Python](https://img.shields.io/badge/python-3.10%2B-informational)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Encode](https://img.shields.io/badge/video-H.264%20CRF16%20%2B%20AAC%20192k-ff69b4)](README.md#quality)
 
-Built for the hard problem: a naive "cut when the face appears, cut when it disappears"
-pipeline produces dozens of sub-second fragments. This system separates **SHOT ≠ SCENE**:
+**Give it a video link and a character (name with bundled references, or your
+own photos). Get back ONE full per-episode video containing every scene of
+that character — nothing split, nothing cut — at the best available quality,
+plus transparent reports.**
 
-1. **Download** — inbuilt [`ytagent`](https://github.com/Bilal140202/ytagent) engine
-   (13-method fallback chain + BGutil POT provider) with spaced retries and
-   ffprobe A/V-parity verification (truncated downloads are rejected and retried).
-2. **Normalize** — lossless remux when the source is already ≤720p H.264/AAC,
-   otherwise one CRF18 re-encode.
-3. **Shot detection** — PySceneDetect `ContentDetector`.
-4. **Face analysis** — InsightFace `buffalo_l` @ 2fps on CPU, matched against
-   verified reference centroids (cosine ≥ 0.42).
-5. **RAW visibility** — direct recognition intervals (≤0.5s miss-bridging, ≥1.0s minimum).
-6. **Evidence** — ffmpeg silencedetect voice activity (energy only — **not** speaker
-   identity) + YouTube captions when reachable.
-7. **Scene continuity layer** — merges raw intervals into GROUPED scenes using
-   multi-evidence scoring: temporal gap, shot adjacency, speech span, caption span,
-   member continuity, position/size stability. Hard blocks: gap > 12s or > 2 shot cuts.
-8. **Export** — ±5s padding (configurable), overlapping windows merged,
-   **libx264 CRF 16 / preset medium / AAC 192k** (visually lossless vs source),
-   `+faststart`, atomic writes with resume.
-9. **QC + reports** — ffprobe every clip, contact sheet, `timeline.json`
-   (RAW + GROUPED timestamp sets), `matches.json`, `report.csv`, `report.html`,
-   `WORKLOG.md`.
-10. **Package** — everything zipped: `clips/ + reports/ + SUMMARY.txt`.
+Designed for idol/band behind-the-scenes content: e.g. feed it a
+BABYMONSTER "SEE YOU THERE BEHIND" episode with `--character ahyeon` and it
+produces `ahyeon_FULL_<video_id>.mp4` — the whole episode's Ahyeon content
+as a single watchable video, with all non-Ahyeon stretches removed and every
+Ahyeon scene kept intact (5 s safety padding on each side).
 
-## Quick start
+---
+
+## Highlights
+
+- **One full video per episode — not fragmented clips.** Padded windows are
+  union-merged (overlaps de-duplicated) and concatenated chronologically.
+  A continuous scene is never split across files; nothing of the character's
+  content is dropped.
+- **Best-available-quality source acquisition.** Inbuilt
+  [ytagent](https://github.com/bilal140202/ytagent) downloader (MIT) with a
+  13-method fallback chain + BGutil POT provider auto-start to defeat
+  datacenter-IP bot checks. Requests up to 1080p and honestly falls back to
+  the highest format YouTube actually serves (720p on most datacenter IPs).
+- **Perfect-HD encode standard.** Every exported pixel is exactly one
+  `libx264 -preset medium -crf 16` generation away from the source, audio
+  AAC 192 kbps, `+faststart`, yuv420p. The final per-episode video is built
+  with stream-copy concat — **zero** additional re-encode generations.
+- **CPU-only.** InsightFace `buffalo_l` face detection + embedding at 2 fps;
+  no GPU required. Frame-level resume inside long analysis steps.
+- **Auto-resume everywhere.** Every pipeline step has an on-disk sentinel;
+  interrupted runs continue where they stopped when you re-run the same
+  command. No babysitting, no restart scripts.
+- **One delivery path for every artifact.** Files ≤ 49 MB go out as Telegram
+  documents; larger files are uploaded to storage.to (anonymous, multipart
+  with per-part retries) and the download link is messaged. Files are never
+  split into Telegram chunks and never transcoded just to fit a limit.
+- **Honest reporting.** RAW visibility timestamps and GROUPED scene
+  timestamps are both reported side-by-side, with confidence values, so a
+  human can always audit what the machine decided.
+
+## Install
 
 ```bash
-pip install -r requirements.txt          # plus ffmpeg on PATH
+git clone https://github.com/ansaribilal14/character-clip-extractor.git
+cd character-clip-extractor
+python3 -m pip install -r requirements.txt   # ffmpeg/ffprobe must be on PATH
+```
 
-# a) character with bundled/known references
-python -m character_clip_extractor \
-    --url https://youtu.be/9G3BYRKujo8 \
+CPU-only: InsightFace `buffalo_l` (~280 MB) downloads automatically to
+`~/.insightface` on first run.
+
+## Quickstart
+
+```bash
+# one command — safe to re-run any time, it resumes automatically
+python3 -m character_clip_extractor \
+    --url https://youtu.be/SDxj3hDFOVI \
     --character ahyeon \
-    --out ./workspace
-
-# b) any character, from your own photos
-python -m character_clip_extractor \
-    --url "https://www.youtube.com/watch?v=XXXX" \
-    --character "some_name" \
-    --ref-images photo1.jpg photo2.jpg photo3.jpg \
-    --out ./workspace
-
-# resume an interrupted run, reusing existing analysis
-python -m character_clip_extractor --url ... --character ... \
-    --out ./workspace --skip-analysis
+    --out workspaces/syt_01_seoul
 ```
 
-Output:
+That single command will:
+
+1. ensure references for the character (bundled BABYMONSTER members, your
+   own photos via `--ref-images`, or `--auto-refs` fancam search);
+2. download the video with the inbuilt ytagent engine (spaced retries,
+   A/V parity verification, truncated files deleted and retried);
+3. normalize losslessly (remux when the source is already h264/AAC ≤ 1080p);
+4. run the analysis pipeline (shots → faces @ 2 fps → RAW visibility →
+   audio activity → captions → scene-continuity grouping);
+5. export all merged padded windows at CRF16 and concat them into the
+   ONE full per-episode video;
+6. write reports (`timeline.json`, `matches.json`, `report.csv`,
+   `report.html`, `WORKLOG.md`) and a ZIP;
+7. deliver: ≤ 49 MB via Telegram document, larger via storage.to link.
+
+Interrupted? **Run the exact same command again.** Completed steps are
+skipped via sentinels; step 02 even resumes mid-file at frame level.
+
+## CLI
 
 ```
-workspace/
-├── output/clips/<character>/scene_XXX.mp4 (+ .jpg thumbnails)
-├── output/reports/{timeline.json, matches.json, report.csv,
-│                   report.html, WORKLOG.md, clip_contact_sheet.jpg}
-└── dist/<character>_clips.zip
+python -m character_clip_extractor --url URL [--character NAME]
+    [--ref-images FILE [FILE...]] [--auto-refs] [--out DIR] [--pad SEC]
+    [--max-height N] [--skip-analysis] [--force-download] [--no-zip]
+    [--no-deliver] [--keep-files] [--tg-send]
 ```
 
-## CLI options
-
-| Flag | Meaning |
+| flag | meaning |
 |------|---------|
-| `--url` | YouTube link (youtu.be, watch, shorts) |
-| `--character` | character slug; must have references unless `--ref-images` |
-| `--ref-images` | reference photo(s) or a directory |
-| `--auto-refs` | best-effort fancam search (needs reachable YouTube) |
-| `--out` | workspace directory |
-| `--pad` | padding seconds around scenes (default 5, merged if overlapping) |
-| `--max-height` | max download resolution (default 720 — disk/CPU friendly) |
-| `--skip-analysis` | reuse existing analysis (resume long runs) |
-| `--force-download` | re-download source even if present |
-| `--no-zip` | skip packaging |
-| `--tg-send` | deliver via Telegram bot (`CCE_TG_TOKEN`, `CCE_TG_CHAT`) |
+| `--url` | YouTube link (required) |
+| `--character` | character slug; must have references (bundled: ahyeon, asa, chiquita, pharita, rami, rora, ruka) |
+| `--ref-images` | your own reference photo(s) or a directory |
+| `--out` | workspace directory (default `<repo>/workspaces/default`) |
+| `--pad` | seconds of context added around each scene (default 5) |
+| `--max-height` | requested max height (default 1080; honest fallback if the IP can't access higher formats) |
+| `--skip-analysis` | reuse existing analysis outputs, skip detection steps |
+| `--no-zip` | skip ZIP packaging (deliver the full video directly) |
+| `--no-deliver` | skip the delivery step entirely |
+| `--keep-files` | keep local files after a storage.to upload is confirmed |
+
+## Pipeline
+
+| step | script | what it does | sentinel |
+|------|--------|--------------|----------|
+| 00 | `00_normalize.py` | lossless remux, or one CRF18 pass if transcode needed | `normalized.mp4` |
+| 01 | `01_detect_shots.py` | PySceneDetect ContentDetector shot boundaries | `shots.json` |
+| 02 | `02_analyze_faces.py` | InsightFace buffalo_l @ 2 fps, cos-vs-centroid matching | `analysis.jsonl` |
+| 03 | `03_raw_visibility.py` | bridging (≤ 0.5 s) + minimum segment (1.0 s) | `raw_visibility.json` |
+| 04 | `04_audio_activity.py` | ffmpeg silencedetect — energy only, **no speaker identity** | `audio_activity.json` |
+| 04b | `04b_fetch_captions.py` | YouTube captions when reachable (may fail on bot check — allowed) | `captions.json` |
+| 05 | `05_group_scenes.py` | multi-evidence scene-continuity grouping (hard block: >12 s gap or >2 shot changes) | `grouped_scenes.json` |
+| 06 | `06_export_clips.py` | padded windows, overlaps merged, CRF16/medium + AAC 192k | `export_plan.json` |
+| 10 | `10_concat_full.py` | chronological stream-copy concat → ONE full video, duration-parity verified | `full_video.json` |
+
+## Quality
+
+Every window is encoded once at `libx264 -preset medium -crf 16` with
+`-pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart`. The final
+per-episode video is a lossless stream-copy concat of those windows, so the
+whole chain from source to deliverable is exactly **one** lossy generation.
+QC verifies each window's A/V duration parity before delivery (±0.01 s in
+typical runs).
+
+If YouTube serves the download IP only 720p (common for datacenter IPs —
+1080p metadata is bot-gated), the tool records that honestly in reports
+instead of pretending otherwise.
+
+## Delivery
+
+`character_clip_extractor.delivery` is the single delivery module used by
+the CLI, the Telegram script and batch tooling:
+
+- ≤ 49 MB → Telegram `sendDocument`
+- \> 49 MB → storage.to anonymous upload (`POST /api/upload/init` → single
+  `PUT` or multipart part `PUT`s with ETag collection → `/upload/confirm`)
+  and a Telegram message with filename, size, expiry and the clickable
+  download URL
+- the storage.to `X-Visitor-Token` is generated once, persisted at
+  `~/.cache/character_clip_extractor_visitor_token` (override:
+  `CCE_VISITOR_TOKEN_FILE`), reused for every upload, and never exposed
+- multipart parts retry on failure; unrecoverable uploads call
+  `/upload/abort` and surface the error
+- local files are deleted after a confirmed upload unless `--keep-files`
 
 ## Honest limitations
 
-- Voice-activity evidence is **energy-based only**; it never claims speaker identity.
-- VLM affordance is not used in this CPU-constrained MVP (recorded as null in evidence).
-- If YouTube captions are unreachable (bot checks), caption evidence is absent.
-- Sub-threshold glimpses (side profile, backlight, blur) can be missed (FN risk).
-- Borderline matches are flagged with their cosine confidence — check the contact
-  sheet and `WORKLOG.md` produced per run.
+- **Voice activity ≠ speaker identity.** Step 04 detects speech energy only.
+  It cannot tell who is talking.
+- **Detection recall.** Heavy blur, extreme angles, sub-80 px faces or
+  unusual lighting can drop detections. The 5 s padding and scene-level
+  grouping mitigate, not eliminate, this. RAW vs GROUPED timestamps are
+  both reported for human auditing.
+- **Grouping is conservative.** Hard blocks (> 12 s gap, > 2 shot changes
+  between appearances) can split one long continuous scene into two grouped
+  scenes; they remain adjacent (and seamless if padded windows overlap) in
+  the per-episode video.
+- **Source resolution is bounded by the download IP.** See Quality.
+- **Datacenter-IP throttling.** Downloads retry with spacing; some windows
+  may still require a later retry.
 
-## Layout
+## Repository layout
 
 ```
-character_clip_extractor/   # package: cli, inbuilt ytagent downloader, refs, runner, packager
-scripts/                    # pipeline steps 00-09 (env-parameterized: CCE_BASE/CCE_TARGET/...)
-references/                 # verified face references + centroids (refs_summary.json)
+character_clip_extractor/   installable package (cli, downloader, refs,
+                            runner, delivery, packager)
+scripts/                    pipeline steps 00-10 (standalone, env-driven)
+references/                 bundled BABYMONSTER member references
+tests/                      smoke tests (60 s end-to-end)
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

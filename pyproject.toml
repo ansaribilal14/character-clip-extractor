@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "character-clip-extractor"
-version = "0.2.0"
-description = "Character-centric video clip extractor: video link + character name/photo -> scene-continuous clips (ZIP, best quality). Inbuilt ytagent downloader, CPU-only face pipeline."
+version = "0.3.0"
+description = "Character-centric video clip extractor: video link + character name/photo -> ONE full per-episode video with all of the character's scenes (no scene splitting), CRF16 HD export, inbuilt ytagent downloader, storage.to delivery for large files, auto-resume pipeline."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}

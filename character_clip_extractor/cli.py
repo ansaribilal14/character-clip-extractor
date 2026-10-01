@@ -8,10 +8,12 @@
         [--skip-analysis] [--auto-refs] [--no-zip] [--tg-send]
 
 Give it a video link and a character (name with bundled references, or your
-own reference photos) and it produces scene-continuous clips of that
-character at the best available quality, plus reports, packaged as a ZIP.
+own reference photos) and it produces ONE full per-episode video containing
+all of that character's scenes (nothing split, nothing cut) at the best
+available quality, plus reports, and delivers it (Telegram <=49MB,
+storage.to link above that). Safe to re-run: it resumes automatically.
 """
-import argparse, os, re, sys, subprocess, time
+import argparse, json, os, re, sys, subprocess, time
 
 from . import downloader, refs, runner, packager
 
@@ -22,6 +24,18 @@ REPO = os.path.dirname(PKG_DIR)
 def slugify(name):
     s = re.sub(r'[^a-z0-9]+', '_', (name or '').strip().lower()).strip('_')
     return s or 'target'
+
+
+def full_video_path(base, target):
+    fj = os.path.join(base, 'output', 'analysis', 'full_video.json')
+    if os.path.exists(fj):
+        try:
+            name = json.load(open(fj)).get('full_video')
+            if name:
+                return os.path.join(base, 'output', 'clips', target, name)
+        except Exception:
+            pass
+    return None
 
 
 def video_id_from_url(url):
@@ -53,7 +67,12 @@ def main(argv=None):
                     help='re-download even if the source video already exists')
     ap.add_argument('--no-zip', action='store_true', help='skip final ZIP packaging')
     ap.add_argument('--tg-send', action='store_true',
-                    help='also deliver clips+reports via Telegram (needs CCE_TG_TOKEN/CCE_TG_CHAT)')
+                    help='(legacy alias) same as the default delivery step')
+    ap.add_argument('--no-deliver', dest='deliver', action='store_false',
+                    help='skip the automatic delivery step')
+    ap.add_argument('--keep-files', action='store_true',
+                    help='do not delete local files after a storage.to upload '
+                         'is confirmed (default: delete after confirm)')
     args = ap.parse_args(argv)
 
     t0 = time.time()
@@ -107,11 +126,19 @@ def main(argv=None):
     if not args.no_zip:
         zip_path = packager.make_zip(base, target, video_url)
 
-    # 5) optional telegram delivery
-    if args.tg_send:
-        env = dict(os.environ); env['CCE_BASE'] = base; env['CCE_TARGET'] = target
-        subprocess.run([sys.executable, os.path.join(runner.SCRIPTS, '09_telegram_send.py')],
-                       env=env)
+    # 5) delivery — ONE path for every artifact: files > 49MB are uploaded
+    #    to storage.to (anonymous, multipart, link sent via Telegram),
+    #    smaller files go out as Telegram documents. Nothing is ever split.
+    if args.deliver or args.tg_send:
+        from . import delivery
+        full = full_video_path(base, target)
+        what = zip_path or full
+        if what:
+            cap = f'character clips: {target} ({video_url})'
+            res = delivery.deliver_auto(what, cap, keep=args.keep_files)
+            print(f'delivery: {res}')
+        else:
+            print('delivery: nothing to deliver')
 
     print(f'=== DONE in {time.time()-t0:.0f}s ===')
     print(f'clips : {base}/output/clips/{target}/')
