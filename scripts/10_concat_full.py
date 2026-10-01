@@ -104,8 +104,6 @@ if missing:
     if missing:
         print('REEXPORT_FAILED'); sys.exit(1)
 
-expected = sum(c['window'][1] - c['window'][0] for c in clips)
-
 def dur_of(p):
     try:
         out = subprocess.check_output(['ffprobe', '-v', 'quiet', '-print_format', 'json',
@@ -113,6 +111,12 @@ def dur_of(p):
         return float(json.loads(out)['format']['duration'])
     except Exception:
         return -1.0
+
+
+# parity baseline = the ACTUAL segment durations (input-seeking keyframe
+# rounding makes per-segment files a bit longer than their windows); comparing
+# the concat output against this sum still catches broken concatenation
+expected = sum(dur_of(os.path.join(OUTDIR, c['clip'])) for c in clips)
 
 def concat_copy():
     lst = f'{AN}/concat_list.txt'
