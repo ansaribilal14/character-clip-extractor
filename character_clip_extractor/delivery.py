@@ -123,6 +123,7 @@ def upload_storage_to(path):
         raise RuntimeError(f'storage.to init failed: {r.status_code} '
                            f'{r.text[:300]}')
     upload_id = d.get('upload_id') or d.get('uploadId')
+    owner_token = d.get('owner_token') or d.get('ownerToken')
     r2_key = d.get('r2_key') or d.get('r2Key') or ''
     put_headers = {}
     for k, v in (d.get('headers') or {}).items():
@@ -141,10 +142,15 @@ def upload_storage_to(path):
             raise RuntimeError('storage.to single PUT failed after retries')
     else:
         part_size = int(d.get('part_size') or d.get('partSize'))
-        n_parts = (size + part_size - 1) // part_size
+        n_parts = int(d.get('total_parts') or ((size + part_size - 1) // part_size))
         log(f'storage.to: multipart, {n_parts} parts x {part_size}B')
-        urls = {int(p['part_number']): p['url']
-                for p in (d.get('parts') or [])}
+        # actual schema: initial_urls is a {"<part_number>": url} map; also
+        # tolerate a parts:[{part_number, url}] list shape for robustness
+        urls = {}
+        for k, u in (d.get('initial_urls') or {}).items():
+            urls[int(k)] = u
+        for p in (d.get('parts') or []):
+            urls[int(p['part_number'])] = p['url']
         etags = {}
 
         def fetch_urls(pn, count):
@@ -155,6 +161,8 @@ def upload_storage_to(path):
             pj = pr.json() if pr.status_code in (200, 201) else {}
             for p in (pj.get('parts') or []):
                 urls[int(p['part_number'])] = p['url']
+            for k, u in (pj.get('initial_urls') or {}).items():
+                urls[int(k)] = u
 
         for pn in range(1, n_parts + 1):
             if pn not in urls:
@@ -162,7 +170,8 @@ def upload_storage_to(path):
             if pn not in urls:
                 _abort(upload_id)
                 raise RuntimeError(f'no presigned URL for part {pn}')
-            offset, length = (pn - 1) * part_size, min(part_size, size - offset)
+            offset = (pn - 1) * part_size
+            length = min(part_size, size - offset)
             ok, etag = _put_with_retries(urls[pn], path, offset, length,
                                          extra_headers=put_headers)
             if not (ok and etag):
@@ -178,7 +187,9 @@ def upload_storage_to(path):
                            json={'upload_id': upload_id,
                                  'parts': [{'partNumber': pn, 'etag': et}
                                            for pn, et in sorted(etags.items())]},
-                           headers=_hdr(), timeout=120)
+                           headers={**_hdr(), **({'X-Owner-Token': owner_token}
+                                                 if owner_token else {})},
+                           timeout=120)
         if cr.status_code not in (200, 201):
             _abort(upload_id)
             raise RuntimeError(f'complete-multipart failed: {cr.status_code} '
@@ -186,8 +197,10 @@ def upload_storage_to(path):
 
     cf = requests.post(f'{STORAGE_API}/upload/confirm',
                        json={'filename': fname, 'size': size,
-                             'content_type': ctype, 'r2_key': r2_key},
-                       headers=_hdr(), timeout=120)
+                             'content_type': ctype, 'r2_key': r2_key,
+                             **({'owner_token': owner_token} if owner_token else {})},
+                       headers={**_hdr(), **({'X-Owner-Token': owner_token}
+                                             if owner_token else {})}, timeout=120)
     try:
         cj = cf.json()
     except Exception:
