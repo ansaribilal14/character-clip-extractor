@@ -30,9 +30,13 @@ import urllib.error
 import requests
 
 STORAGE_API = os.environ.get('CCE_STORAGE_API', 'https://storage.to/api')
-TG_TOKEN = os.environ.get('CCE_TG_TOKEN',
-                          'REDACTED')
-TG_CHAT = os.environ.get('CCE_TG_CHAT', 'REDACTED')
+
+# Secrets are injected via environment ONLY — never hardcoded, never committed.
+#   CCE_TG_TOKEN  Telegram bot token   CCE_TG_CHAT  Telegram chat id
+# If unset, Telegram delivery is skipped with a warning and the caller still
+# receives the storage.to URL in the returned dict.
+TG_TOKEN = os.environ.get('CCE_TG_TOKEN', '')
+TG_CHAT = os.environ.get('CCE_TG_CHAT', '')
 TG_MAX_BYTES = 50 * 1024 * 1024          # hard Bot API limit
 SAFE_TG_BYTES = 49 * 1024 * 1024         # practical margin
 TOKEN_FILE = os.environ.get(
@@ -198,6 +202,10 @@ def upload_storage_to(path):
 
 # ------------------------------------------------------------ telegram ---
 def _tg(method, payload):
+    if not TG_TOKEN or not TG_CHAT:
+        log('telegram skipped: CCE_TG_TOKEN / CCE_TG_CHAT not set (secrets '
+            'are env-only and never stored in the repo)')
+        return False
     r = requests.post(f'https://api.telegram.org/bot{TG_TOKEN}/{method}',
                       json=payload, timeout=120)
     ok = r.status_code == 200 and r.json().get('ok')
@@ -208,6 +216,9 @@ def _tg(method, payload):
 
 def send_document(path, caption=''):
     """Direct Telegram sendDocument (only for small files)."""
+    if not TG_TOKEN or not TG_CHAT:
+        log('telegram skipped: CCE_TG_TOKEN / CCE_TG_CHAT not set')
+        return False
     path = os.path.abspath(path)
     with open(path, 'rb') as f:
         r = requests.post(

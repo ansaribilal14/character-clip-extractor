@@ -52,6 +52,7 @@ SENTINELS = {
     '04_audio_activity.py': [f'{AN}/audio_activity.json'],
     '05_group_scenes.py': [f'{AN}/grouped_scenes.json'],
     '06_export_clips.py': [f'{AN}/export_plan.json'],     # verified below
+    '06b_contact_sheet.py': ['output/reports/clip_contact_sheet.jpg'],
     '07_qc.py': [f'{AN}/qc.json'],
     '08_reports.py': ['output/reports/report.html'],
     '10_concat_full.py': [f'{AN}/full_video.json'],
