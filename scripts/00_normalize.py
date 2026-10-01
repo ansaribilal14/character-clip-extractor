@@ -11,6 +11,7 @@ import sys, os, subprocess, json
 BASE = os.environ.get('CCE_BASE', '/home/z/my-project/clipextractor')
 SRC_DIR = f'{BASE}/output/source'
 OUT = f'{BASE}/output/analysis/normalized.mp4'
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
 
 def ffprobe(path):
     cmd = ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', path]
