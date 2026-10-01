@@ -151,6 +151,22 @@ the CLI, the Telegram script and batch tooling:
   `/upload/abort` and surface the error
 - local files are deleted after a confirmed upload unless `--keep-files`
 
+## Secrets
+
+All credentials are injected via environment variables and are **never
+hardcoded or committed**:
+
+| Variable | Purpose |
+|----------|---------|
+| `CCE_TG_TOKEN` | Telegram bot token (from @BotFather) |
+| `CCE_TG_CHAT` | Telegram chat id that receives files / links |
+| `CCE_TG_TOKEN` / `CCE_TG_CHAT` unset | Telegram steps are skipped with a warning; storage.to still returns the download URL to the caller |
+| `CCE_VISITOR_TOKEN_FILE` | where the persistent storage.to visitor token lives (default `~/.cache/...`) |
+
+Store them in your shell profile, a `.env` file outside the repository, or
+GitHub Actions secrets. History is kept clean of credentials by policy; if
+a secret ever lands in a commit, rewrite history and force-push.
+
 ## Honest limitations
 
 - **Voice activity ≠ speaker identity.** Step 04 detects speech energy only.
