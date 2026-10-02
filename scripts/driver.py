@@ -25,8 +25,8 @@ WORKSPACES = os.path.join(REPO, 'workspaces')
 STATUS_FILE = os.path.join(WORKSPACES, 'batch_status.json')
 WORKLOG = '/home/z/my-project/worklog.md'
 SECRETS = '/home/z/my-project/.secrets/tg.env'
-BUDGET_S = 420
-STEP_CAP = 360
+BUDGET_S = 380
+STEP_CAP = 320
 
 EPISODES = [
     ('hm_01_ny3', 'iGjY31tyzUc', 'NY #3'),
@@ -281,7 +281,7 @@ def main():
             continue
         base = base_of(name)
         left = BUDGET_S - (time.time() - t0)
-        if left < 30:
+        if left < 90:
             log('round budget exhausted; clean exit (re-run to continue)')
             return 0
         if full_video_json(base):
