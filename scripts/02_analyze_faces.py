@@ -39,11 +39,26 @@ step = src_fps / FPS_SAMPLE
 records = []
 resume_t = 0.0
 if os.path.exists(OUT):
-    prev = [json.loads(l) for l in open(OUT)]
-    if prev:
-        records = prev
-        resume_t = prev[-1]['t']
-        print(f'RESUMING from t={resume_t:.1f}s ({len(prev)} records)')
+    # A killed run can leave a torn (half-written) line; a later append would
+    # then corrupt the next line too. Keep only complete valid records and
+    # truncate the file to the end of the last valid one.
+    valid, scan = [], 0
+    with open(OUT, 'rb') as f:
+        raw = f.read()
+    for line in raw.splitlines(keepends=True):
+        try:
+            valid.append(json.loads(line.decode()))
+            scan += len(line)
+        except Exception:
+            pass
+    if scan < len(raw):
+        with open(OUT, 'r+b') as f:
+            f.truncate(scan)
+        print(f'truncated {len(raw) - scan} torn bytes from {OUT}')
+    if valid:
+        records = valid
+        resume_t = valid[-1]['t']
+        print(f'RESUMING from t={resume_t:.1f}s ({len(valid)} records)')
 out_f = open(OUT, 'a' if records else 'w')
 next_idx = int(resume_t * src_fps)
 t_start = time.time()

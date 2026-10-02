@@ -99,8 +99,17 @@ def _s02_complete(base):
     expected = int(dur / 0.5) + 1 if dur else 0
     if not expected:
         return True                      # cannot verify -> trust the file
+    n = 0
     with open(p) as f:
-        n = sum(1 for _ in f)
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                json.loads(line)
+                n += 1                   # torn lines don't count
+            except json.JSONDecodeError:
+                pass
     return n >= expected
 
 
