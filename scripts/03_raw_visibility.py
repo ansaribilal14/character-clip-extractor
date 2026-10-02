@@ -26,7 +26,15 @@ def shot_of(t):
             return s['shot_id']
     return shots[-1]['shot_id'] if shots else -1
 
-recs = [json.loads(l) for l in open(IN)]
+recs = []
+for l in open(IN):
+    l = l.strip()
+    if not l:
+        continue
+    try:
+        recs.append(json.loads(l))
+    except json.JSONDecodeError:
+        continue          # torn line from a mid-write kill — skip it
 hits = []   # (t, cos) where target visible
 for r in recs:
     if r.get(TKEY) is not None:
