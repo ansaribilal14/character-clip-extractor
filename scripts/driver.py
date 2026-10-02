@@ -43,6 +43,26 @@ EPISODES = [
 ]
 
 
+def _pick_cli_python():
+    """Pick an interpreter that can actually import the full stack.
+    The platform venv and /usr/bin/python3 may differ in site-packages."""
+    cands = [os.environ.get('CCE_PY'), '/usr/bin/python3', sys.executable]
+    check = ('import character_clip_extractor, insightface, cv2, requests')
+    for c in cands:
+        if not c:
+            continue
+        try:
+            r = subprocess.run([c, '-c', check], capture_output=True, timeout=90)
+            if r.returncode == 0:
+                return c
+        except Exception:
+            continue
+    return sys.executable
+
+
+CLI_PY = _pick_cli_python()
+
+
 def log(m):
     print(f'[driver] {m}', flush=True)
 
@@ -186,12 +206,12 @@ def run_cli(name, vid, left):
     env.update(load_secrets())
     env['CCE_VISITOR_TOKEN_FILE'] = os.path.join(
         WORKSPACES, 'storage_visitor_token.txt')
-    cmd = [sys.executable, '-m', 'character_clip_extractor',
+    cmd = [CLI_PY, '-m', 'character_clip_extractor',
            '--url', f'https://youtu.be/{vid}', '--character', 'ahyeon',
            '--out', base, '--pad', '5', '--max-height', '1080',
            '--no-zip', '--no-deliver']
     timeout = max(5, min(STEP_CAP, int(left)))
-    log(f'>>> CLI round (timeout {timeout}s): {name}')
+    log(f'>>> CLI round (timeout {timeout}s): {name} [py={CLI_PY}]')
     try:
         p = subprocess.run(cmd, timeout=timeout, env=env,
                            capture_output=True, text=True)
@@ -201,8 +221,11 @@ def run_cli(name, vid, left):
         if p.returncode != 0:
             err = ' | '.join((p.stderr or '').strip().splitlines()[-4:])
             log(f'CLI rc={p.returncode}: {err}')
+            return p.returncode
+        return 0
     except subprocess.TimeoutExpired:
         log('CLI round hit budget (mid-step kill expected; resumes next round)')
+        return 0
 
 
 def status_table(s):
@@ -242,7 +265,20 @@ def main():
                 return 0
             deliver_episode(name, vid, title, s)
         else:
-            run_cli(name, vid, left)
+            fails = int(ep.get('fail_count', 0))
+            if fails >= 4:
+                log(f'{name}: {fails} consecutive failures — blocked, skipping '
+                    f'to next episode this round')
+                continue
+            rc = run_cli(name, vid, left)
+            if rc != 0:
+                ep['fail_count'] = fails + 1
+                save_status(s)
+                log(f'{name}: failed ({fails + 1}/4) — ending round, retry next round')
+                return 0                      # dedicated retry next round
+            if 'fail_count' in ep:
+                ep.pop('fail_count')
+                save_status(s)
             if full_video_json(base):
                 left = BUDGET_S - (time.time() - t0)
                 if left >= 300:

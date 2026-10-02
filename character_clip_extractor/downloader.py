@@ -153,11 +153,13 @@ def _download_with_ytdlp(url, out_dir, max_height, timeout):
     return _pick_verified(out_dir)
 
 
-def download(url, out_dir, max_height=720, attempts=4, spacing_s=30, timeout=240):
+def download(url, out_dir, max_height=720, attempts=4, spacing_s=15, timeout=60):
     """Download `url` with inbuilt ytagent; returns local path or None.
 
     Spaced retries matter: on throttled datacenter IPs attempts can start
     succeeding after the throttle window passes (observed ~35 min in testing).
+    timeout=60 keeps each attempt short so several full attempt cycles fit
+    inside one budget-limited driver round (~360s).
     """
     if not ensure_ytagent_cli():
         log('WARNING: ytagent-cli unavailable; will try yt-dlp only')
