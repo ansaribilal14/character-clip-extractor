@@ -74,7 +74,11 @@ def load_secrets():
             line = line.strip()
             if line and not line.startswith('#') and '=' in line:
                 k, v = line.split('=', 1)
-                vals[k.strip()] = v.strip()
+                k = k.strip()
+                # accept both bare and CCE_ prefixed names
+                if k in ('TG_TOKEN', 'TG_CHAT'):
+                    k = 'CCE_' + k
+                vals[k] = v.strip()
     except OSError:
         pass
     return vals
@@ -162,7 +166,15 @@ def deliver_episode(name, vid, title, s):
     log(f'delivering {name} ({size_mb:.1f} MB) ...')
     res = delivery.deliver_auto(fvp, cap, keep=False)
     url = res.get('url') or ''
-    log(f'delivery: kind={res.get("kind")} ok={res.get("ok")} url={url}')
+    ok = bool(res.get('ok'))
+    log(f'delivery: kind={res.get("kind")} ok={ok} url={url}')
+    if not ok:
+        ep = s['episodes'].setdefault(name, {})
+        ep['deliver_fail'] = int(ep.get('deliver_fail', 0)) + 1
+        save_status(s)
+        log(f'{name}: delivery NOT confirmed (attempt '
+            f'{ep["deliver_fail"]}) — will retry next round')
+        return False
     ep = s['episodes'].setdefault(name, {})
     ep.update({'title': title, 'delivered': True, 'kind': res.get('kind'),
                'url': url, 'expires_at': res.get('expires_at'),
