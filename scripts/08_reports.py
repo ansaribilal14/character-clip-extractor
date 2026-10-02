@@ -23,7 +23,6 @@ plan = json.load(open(f'{AN}/export_plan.json'))
 qc = json.load(open(f'{AN}/qc.json'))
 audio = json.load(open(f'{AN}/audio_activity.json'))
 cap_doc = json.load(open(f'{AN}/captions.json')) if os.path.exists(f'{AN}/captions.json') else None
-recs = 
 recs = []
 for l in open(f'{AN}/analysis.jsonl'):
     l = l.strip()

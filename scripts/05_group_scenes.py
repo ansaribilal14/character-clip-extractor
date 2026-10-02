@@ -47,7 +47,6 @@ def _vw():
 VW = _vw()
 audio = json.load(open(f'{AN}/audio_activity.json')) if os.path.exists(f'{AN}/audio_activity.json') else None
 cap_doc = json.load(open(f'{AN}/captions.json')) if os.path.exists(f'{AN}/captions.json') else None
-recs = 
 recs = []
 for l in open(f'{AN}/analysis.jsonl'):
     l = l.strip()

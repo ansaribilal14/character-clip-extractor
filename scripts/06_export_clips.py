@@ -38,7 +38,6 @@ for s in scenes:
     else:
         wins.append([a, b, [s['scene_id']]])
 
-recs = 
 recs = []
 for l in open(f'{AN}/analysis.jsonl'):
     l = l.strip()
