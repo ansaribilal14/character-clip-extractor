@@ -1,0 +1,17 @@
+LICENSE
+README.md
+pyproject.toml
+character_clip_extractor/__init__.py
+character_clip_extractor/__main__.py
+character_clip_extractor/cli.py
+character_clip_extractor/delivery.py
+character_clip_extractor/downloader.py
+character_clip_extractor/packager.py
+character_clip_extractor/refs.py
+character_clip_extractor/runner.py
+character_clip_extractor.egg-info/PKG-INFO
+character_clip_extractor.egg-info/SOURCES.txt
+character_clip_extractor.egg-info/dependency_links.txt
+character_clip_extractor.egg-info/entry_points.txt
+character_clip_extractor.egg-info/requires.txt
+character_clip_extractor.egg-info/top_level.txt

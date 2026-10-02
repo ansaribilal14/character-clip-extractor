@@ -1,0 +1,8 @@
+numpy
+opencv-python
+insightface
+onnxruntime
+scenedetect>=0.7
+yt-dlp
+ytagent-cli
+requests

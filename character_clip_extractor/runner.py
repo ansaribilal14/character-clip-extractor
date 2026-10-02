@@ -50,6 +50,8 @@ SENTINELS = {
     '02_analyze_faces.py': [f'{AN}/analysis.jsonl'],      # frame-resume inside
     '03_raw_visibility.py': [f'{AN}/raw_visibility.json'],
     '04_audio_activity.py': [f'{AN}/audio_activity.json'],
+    # 04b always writes captions.json (either CAPTIONS_OK or CAPTIONS_UNAVAILABLE)
+    '04b_fetch_captions.py': [f'{AN}/captions.json'],
     '05_group_scenes.py': [f'{AN}/grouped_scenes.json'],
     '06_export_clips.py': [f'{AN}/export_plan.json'],     # verified below
     '06b_contact_sheet.py': ['output/reports/clip_contact_sheet.jpg'],
@@ -75,7 +77,36 @@ def _s06_complete(base):
         return False
 
 
+def _ffprobe_duration(path):
+    try:
+        p = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'default=nw=1:nk=1', path],
+            capture_output=True, text=True, timeout=30)
+        return float(p.stdout.strip())
+    except Exception:
+        return 0.0
+
+
+def _s02_complete(base):
+    """02 is complete only when every expected 2fps sample has a jsonl line.
+    A non-empty analysis.jsonl alone proves nothing — frame-level resume
+    means partial files are common."""
+    p = os.path.join(base, AN, 'analysis.jsonl')
+    if not os.path.exists(p) or os.path.getsize(p) == 0:
+        return False
+    dur = _ffprobe_duration(os.path.join(base, AN, 'normalized.mp4'))
+    expected = int(dur / 0.5) + 1 if dur else 0
+    if not expected:
+        return True                      # cannot verify -> trust the file
+    with open(p) as f:
+        n = sum(1 for _ in f)
+    return n >= expected
+
+
 def step_complete(base, script):
+    if script == '02_analyze_faces.py':
+        return _s02_complete(base)
     paths = SENTINELS.get(script)
     if not paths:
         return False

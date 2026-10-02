@@ -1,0 +1,2 @@
+[console_scripts]
+character-clip-extractor = character_clip_extractor.cli:main
