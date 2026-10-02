@@ -212,20 +212,34 @@ def run_cli(name, vid, left):
            '--no-zip', '--no-deliver']
     timeout = max(5, min(STEP_CAP, int(left)))
     log(f'>>> CLI round (timeout {timeout}s): {name} [py={CLI_PY}]')
+    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True,
+                            start_new_session=True)
     try:
-        p = subprocess.run(cmd, timeout=timeout, env=env,
-                           capture_output=True, text=True)
-        tail = '\n'.join((p.stdout or '').strip().splitlines()[-12:])
-        if tail:
-            print(tail, flush=True)
-        if p.returncode != 0:
-            err = ' | '.join((p.stderr or '').strip().splitlines()[-4:])
-            log(f'CLI rc={p.returncode}: {err}')
-            return p.returncode
-        return 0
+        out, errbuf = proc.communicate(timeout=timeout)
+        rc = proc.returncode
     except subprocess.TimeoutExpired:
-        log('CLI round hit budget (mid-step kill expected; resumes next round)')
+        # kill the whole process group: orphaned ffmpeg children would keep
+        # the stdout pipe open and hang communicate() until the tool kill
+        import signal
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except Exception:
+            proc.kill()
+        log('CLI round hit budget (process group killed; resumes next round)')
+        try:
+            proc.communicate(timeout=30)
+        except Exception:
+            pass
         return 0
+    tail = '\n'.join((out or '').strip().splitlines()[-12:])
+    if tail:
+        print(tail, flush=True)
+    if rc != 0:
+        err = ' | '.join((errbuf or '').strip().splitlines()[-4:])
+        log(f'CLI rc={rc}: {err}')
+        return rc
+    return 0
 
 
 def status_table(s):
