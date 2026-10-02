@@ -23,7 +23,16 @@ plan = json.load(open(f'{AN}/export_plan.json'))
 qc = json.load(open(f'{AN}/qc.json'))
 audio = json.load(open(f'{AN}/audio_activity.json'))
 cap_doc = json.load(open(f'{AN}/captions.json')) if os.path.exists(f'{AN}/captions.json') else None
-recs = [json.loads(l) for l in open(f'{AN}/analysis.jsonl')]
+recs = 
+recs = []
+for l in open(f'{AN}/analysis.jsonl'):
+    l = l.strip()
+    if not l:
+        continue
+    try:
+        recs.append(json.loads(l))
+    except json.JSONDecodeError:
+        continue          # torn line from a mid-write kill — skip it
 refs = json.load(open(f'{BASE}/references/refs_summary.json'))
 
 def ts(sec):

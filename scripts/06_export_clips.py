@@ -38,7 +38,16 @@ for s in scenes:
     else:
         wins.append([a, b, [s['scene_id']]])
 
-recs = [json.loads(l) for l in open(f'{AN}/analysis.jsonl')]
+recs = 
+recs = []
+for l in open(f'{AN}/analysis.jsonl'):
+    l = l.strip()
+    if not l:
+        continue
+    try:
+        recs.append(json.loads(l))
+    except json.JSONDecodeError:
+        continue          # torn line from a mid-write kill — skip it
 plan = []
 for i, (a, b, sids) in enumerate(wins):
     name = '_'.join(sids)
