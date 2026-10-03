@@ -185,16 +185,15 @@ def _gh_api(path, method='GET', body=None, timeout=30):
 
 
 def _farm_artifact(video_id):
-    """Find a non-expired artifact video_<id> in the farm repo. Returns
-    (artifact_id, archive_url) or None."""
+    """Find the NEWEST non-expired artifact video_<id> in the farm repo."""
     res = _gh_api(f'/repos/{FARM_OWNER}/{FARM_REPO}/actions/artifacts'
                   f'?name=video_{video_id}&per_page=10')
     if not res or res[0] != 200:
         return None
-    for a in res[1].get('artifacts', []):
-        if a.get('name') == f'video_{video_id}' and not a.get('expired'):
-            return a
-    return None
+    arts = [a for a in res[1].get('artifacts', [])
+            if a.get('name') == f'video_{video_id}' and not a.get('expired')]
+    arts.sort(key=lambda a: a.get('created_at', ''), reverse=True)
+    return arts[0] if arts else None
 
 
 def _farm_download_artifact(video_id, out_dir):
@@ -208,10 +207,17 @@ def _farm_download_artifact(video_id, out_dir):
         return None
     zpath = os.path.join(out_dir, f'farm_{video_id}.zip')
     try:
-        req = urllib.request.Request(url, headers={
-            'Authorization': f'token {token}', 'User-Agent': 'cce-farm-client'})
-        with urllib.request.urlopen(req, timeout=300) as r, open(zpath, 'wb') as f:
-            shutil.copyfileobj(r, f)
+        # requests strips the Authorization header on the cross-host redirect
+        # to blob storage; urllib keeps it and blob auth fails with 403
+        import requests as _rq
+        with _rq.get(url, headers={'Authorization': f'token {token}',
+                                   'User-Agent': 'cce-farm-client'},
+                     stream=True, timeout=120) as r:
+            r.raise_for_status()
+            with open(zpath, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=1 << 20):
+                    if chunk:
+                        f.write(chunk)
     except Exception as e:
         log(f'farm artifact download failed: {e}')
         try:
@@ -228,10 +234,11 @@ def _farm_download_artifact(video_id, out_dir):
         return None
     for f in sorted(_video_files(out_dir), key=lambda f: os.path.getsize(
             os.path.join(out_dir, f)), reverse=True):
-        ok, why = verify_file(f)
+        fpath = os.path.join(out_dir, f)
+        ok, why = verify_file(fpath)
         log(f'farm candidate {f}: {why}')
         if ok:
-            return os.path.join(out_dir, f)
+            return fpath
     return None
 
 
@@ -239,16 +246,25 @@ def _farm_dispatch_and_wait(url, out_dir, budget_s=540):
     """Dispatch a farm run (if needed) and wait for its artifact."""
     video_id = _video_id_of(url)
     log(f'farm: dispatching {FARM_OWNER}/{FARM_REPO} for {video_id}')
-    res = _gh_api(
-        f'/repos/{FARM_OWNER}/{FARM_REPO}/actions/workflows/'
-        f'{FARM_WORKFLOW}/dispatches', method='POST',
-        body={'ref': 'main',
-              'inputs': {'video_url': f'https://www.youtube.com/watch?v={video_id}',
-                         'video_id': video_id}})
-    if not res or res[0] != 204:
-        log(f'farm: dispatch failed ({res})')
-        return None
-    # wait for the run to conclude, then grab the artifact
+    # don't stack duplicate runs: if one is already queued/running, just wait
+    runs = _gh_api(f'/repos/{FARM_OWNER}/{FARM_REPO}/actions/runs'
+                   f'?event=workflow_dispatch&per_page=5')
+    if runs and runs[0] == 200:
+        for r in runs[1].get('workflow_runs', []):
+            if r.get('status') in ('queued', 'in_progress'):
+                log(f"farm: run {r['id']} already {r['status']} — waiting")
+                break
+        else:
+            res = _gh_api(
+                f'/repos/{FARM_OWNER}/{FARM_REPO}/actions/workflows/'
+                f'{FARM_WORKFLOW}/dispatches', method='POST',
+                body={'ref': 'main',
+                      'inputs': {'video_url': f'https://www.youtube.com/watch?v={video_id}',
+                                 'video_id': video_id}})
+            if not res or res[0] != 204:
+                log(f'farm: dispatch failed ({res})')
+                return None
+    t0 = time.monotonic()
     while time.monotonic() - t0 < budget_s:
         time.sleep(20)
         runs = _gh_api(f'/repos/{FARM_OWNER}/{FARM_REPO}/actions/runs'
