@@ -37,20 +37,26 @@ def main(src):
     ok_container = src.lower().endswith(('.mp4', '.mov', '.m4v'))
     ok_v = v and v['codec_name'] == 'h264' and int(v.get('height', 0)) <= MAXH
     ok_a = a and a['codec_name'] == 'aac'
+    # atomic write: kill-mid-remux must never leave a truncated OUT that the
+    # file-existence sentinel would treat as complete
+    PART = OUT + '.part'
+    if os.path.exists(PART):
+        os.remove(PART)
     if ok_container and ok_v and ok_a:
         print(f'REMUX (lossless, source h264/aac height<={MAXH})')
-        cmd = ['ffmpeg', '-y', '-i', src, '-c', 'copy', '-movflags', '+faststart', OUT]
+        cmd = ['ffmpeg', '-y', '-i', src, '-c', 'copy', '-movflags', '+faststart', PART]
         subprocess.run(cmd, check=True, capture_output=True)
     else:
         print(f'RE-ENCODE at crf 18 (height capped {MAXH})')
         vf = f'scale=-2:min({MAXH}\\,ih):flags=bicubic,format=yuv420p'
         cmd = ['ffmpeg', '-y', '-i', src, '-vf', vf,
                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
-               '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', OUT]
+               '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', PART]
         subprocess.run(cmd, check=True, capture_output=True)
-    info2 = ffprobe(OUT)
+    info2 = ffprobe(PART)
     v2 = next(s for s in info2['streams'] if s['codec_type'] == 'video')
-    print(f"OUT dur={float(info2['format']['duration']):.1f}s {v2['codec_name']} {v2['width']}x{v2['height']} size={os.path.getsize(OUT)/1e6:.1f}MB")
+    print(f"OUT dur={float(info2['format']['duration']):.1f}s {v2['codec_name']} {v2['width']}x{v2['height']} size={os.path.getsize(PART)/1e6:.1f}MB")
+    os.replace(PART, OUT)
     print('NORMALIZE_OK')
 
 if __name__ == '__main__':
