@@ -68,17 +68,20 @@ def log(m):
 
 
 def load_secrets():
+    """Load every .env file in the secrets dir (tg.env, gh.env, ...)."""
     vals = {}
     try:
-        for line in open(SECRETS):
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                k, v = line.split('=', 1)
-                k = k.strip()
-                # accept both bare and CCE_ prefixed names
-                if k in ('TG_TOKEN', 'TG_CHAT'):
-                    k = 'CCE_' + k
-                vals[k] = v.strip()
+        for fn in sorted(os.listdir(SECRETS)):
+            if not fn.endswith('.env'):
+                continue
+            for line in open(os.path.join(SECRETS, fn)):
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    k, v = line.split('=', 1)
+                    k = k.strip()
+                    if k in ('TG_TOKEN', 'TG_CHAT'):
+                        k = 'CCE_' + k
+                    vals[k] = v.strip()
     except OSError:
         pass
     return vals
