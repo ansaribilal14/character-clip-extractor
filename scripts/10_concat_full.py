@@ -67,8 +67,30 @@ raw_windows += [(max(0.0, r['start'] - PAD), min(r['end'] + PAD, VDUR)) for r in
 merged = merge_windows(raw_windows)
 
 
+def _seg_ok(out, exp_dur):
+    """A segment left over from a killed run may be torn/truncated (e.g. a
+    48-byte header-only file). Only trust it when A/V streams exist and the
+    duration matches the window."""
+    try:
+        r = subprocess.run(['ffprobe', '-v', 'quiet', '-print_format', 'json',
+                            '-show_format', '-show_streams', out],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return False
+        info = json.loads(r.stdout)
+        kinds = {s.get('codec_type') for s in info.get('streams', [])}
+        if not {'video', 'audio'} <= kinds:
+            return False
+        vd = float(info.get('format', {}).get('duration', 0) or 0)
+        return not (exp_dur and vd and abs(vd - exp_dur) > 2.0)
+    except Exception:
+        return False
+
+
 def encode_segment(idx, a, b):
     out = f'{OUTDIR}/full_{idx:03d}.mp4'
+    if os.path.exists(out) and not _seg_ok(out, b - a):
+        os.remove(out)          # torn leftover from a killed run — re-encode
     if not os.path.exists(out):
         subprocess.run(['ffmpeg', '-y', '-loglevel', 'error',
                         '-ss', f'{a:.3f}', '-to', f'{b:.3f}', '-i', VIDEO,
