@@ -47,6 +47,28 @@ for l in open(f'{AN}/analysis.jsonl'):
         recs.append(json.loads(l))
     except json.JSONDecodeError:
         continue          # torn line from a mid-write kill — skip it
+
+
+def _clip_ok(out, exp_dur):
+    """A leftover clip from a killed run can be truncated; only skip the
+    re-export when the file has complete A/V streams and a sane duration."""
+    try:
+        r = subprocess.run(['ffprobe', '-v', 'quiet', '-print_format', 'json',
+                            '-show_format', '-show_streams', out],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return False
+        info = json.loads(r.stdout)
+        ss = info.get('streams', [])
+        v = next((s for s in ss if s['codec_type'] == 'video'), None)
+        a = next((s for s in ss if s['codec_type'] == 'audio'), None)
+        if v is None or a is None:
+            return False
+        vd = (float(v.get('duration', 0) or 0)
+              or float(info.get('format', {}).get('duration', 0) or 0))
+        return not (exp_dur and vd and abs(vd - exp_dur) > 2.0)
+    except Exception:
+        return False
 plan = []
 for i, (a, b, sids) in enumerate(wins):
     name = '_'.join(sids)
@@ -58,7 +80,8 @@ for i, (a, b, sids) in enumerate(wins):
            '-pix_fmt', 'yuv420p',
            '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', out]
     p = subprocess.run(cmd, capture_output=True, text=True) if not (
-        os.path.exists(out) and os.path.getsize(out) > 100_000) else None
+        os.path.exists(out) and os.path.getsize(out) > 100_000
+        and _clip_ok(out, b - a)) else None
     ok = (p is None or p.returncode == 0) and os.path.exists(out) and os.path.getsize(out) > 100_000
 
     # peak Ahyeon frame
