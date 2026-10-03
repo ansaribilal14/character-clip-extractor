@@ -45,14 +45,18 @@ def main(src):
     if ok_container and ok_v and ok_a:
         print(f'REMUX (lossless, source h264/aac height<={MAXH})')
         cmd = ['ffmpeg', '-y', '-i', src, '-c', 'copy', '-movflags', '+faststart', PART]
-        subprocess.run(cmd, check=True, capture_output=True)
+        r = subprocess.run(cmd, capture_output=True, text=True)
     else:
         print(f'RE-ENCODE at crf 18 (height capped {MAXH})')
         vf = f'scale=-2:min({MAXH}\\,ih):flags=bicubic,format=yuv420p'
         cmd = ['ffmpeg', '-y', '-i', src, '-vf', vf,
                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
                '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', PART]
-        subprocess.run(cmd, check=True, capture_output=True)
+        r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f'FFMPEG_EXIT {r.returncode}', flush=True)
+        print((r.stderr or '')[-1000:], flush=True)
+        sys.exit(1)
     info2 = ffprobe(PART)
     v2 = next(s for s in info2['streams'] if s['codec_type'] == 'video')
     print(f"OUT dur={float(info2['format']['duration']):.1f}s {v2['codec_name']} {v2['width']}x{v2['height']} size={os.path.getsize(PART)/1e6:.1f}MB")
