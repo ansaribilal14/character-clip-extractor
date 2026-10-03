@@ -44,14 +44,14 @@ def main(src):
         os.remove(PART)
     if ok_container and ok_v and ok_a:
         print(f'REMUX (lossless, source h264/aac height<={MAXH})')
-        cmd = ['ffmpeg', '-y', '-i', src, '-c', 'copy', '-movflags', '+faststart', PART]
+        cmd = ['ffmpeg', '-y', '-i', src, '-c', 'copy', '-movflags', '+faststart', '-f', 'mp4', PART]
         r = subprocess.run(cmd, capture_output=True, text=True)
     else:
         print(f'RE-ENCODE at crf 18 (height capped {MAXH})')
         vf = f'scale=-2:min({MAXH}\\,ih):flags=bicubic,format=yuv420p'
         cmd = ['ffmpeg', '-y', '-i', src, '-vf', vf,
                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
-               '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', PART]
+               '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-f', 'mp4', PART]
         r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print(f'FFMPEG_EXIT {r.returncode}', flush=True)
