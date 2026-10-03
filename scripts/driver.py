@@ -98,7 +98,7 @@ def _preload_env():
 
 _preload_env()
 sys.path.insert(0, REPO)
-from character_clip_extractor import refs, delivery  # noqa: E402
+from character_clip_extractor import refs, delivery, downloader  # noqa: E402
 
 
 def base_of(name):
@@ -217,6 +217,22 @@ def run_cli(name, vid, left):
     log(f'references: {msg}')
     if not ok:
         raise RuntimeError('reference setup failed')
+    # farm artifact pickup BEFORE the pipeline: a completed farm run for this
+    # video means we can skip direct-download attempts entirely
+    src_dir = os.path.join(base, 'output', 'source')
+    os.makedirs(src_dir, exist_ok=True)
+    have_src = bool(downloader._pick_verified(src_dir)) \
+        if os.path.isdir(src_dir) else False
+    have_norm = os.path.exists(
+        os.path.join(base, 'output', 'analysis', 'normalized.mp4'))
+    if not have_src and not have_norm:
+        t = time.monotonic()
+        try:
+            got = downloader._farm_pickup(f'https://youtu.be/{vid}', src_dir)
+            if got:
+                log(f'farm pickup: {got} ({time.monotonic() - t:.0f}s)')
+        except Exception as e:
+            log(f'farm pickup error (continuing): {e}')
     env = dict(os.environ)
     env.update(load_secrets())
     env['CCE_VISITOR_TOKEN_FILE'] = os.path.join(
