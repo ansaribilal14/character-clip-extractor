@@ -24,7 +24,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKSPACES = os.path.join(REPO, 'workspaces')
 STATUS_FILE = os.path.join(WORKSPACES, 'batch_status.json')
 WORKLOG = '/home/z/my-project/worklog.md'
-SECRETS = '/home/z/my-project/.secrets/tg.env'
+SECRETS = '/home/z/my-project/.secrets'
 BUDGET_S = 380
 STEP_CAP = 320
 
