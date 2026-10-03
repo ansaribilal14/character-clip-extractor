@@ -235,21 +235,9 @@ def _farm_download_artifact(video_id, out_dir):
     return None
 
 
-def _download_with_farm(url, out_dir, budget_s=540):
-    """Remote download via GitHub Actions farm. Idempotent: if a previous
-    round already dispatched a run for this video, we pick up its artifact
-    instead of re-dispatching. Returns a local path or None."""
-    video_id = url.rstrip('/').split('/')[-1].split('?v=')[-1][:11]
-    if not os.environ.get('CCE_GH_TOKEN'):
-        log('farm: no CCE_GH_TOKEN — skipping farm fallback')
-        return None
-    os.makedirs(out_dir, exist_ok=True)
-    t0 = time.monotonic()
-    # already-completed artifact from an earlier round/run?
-    got = _farm_download_artifact(video_id, out_dir)
-    if got:
-        log(f'DOWNLOADED (farm artifact): {got}')
-        return got
+def _farm_dispatch_and_wait(url, out_dir, budget_s=540):
+    """Dispatch a farm run (if needed) and wait for its artifact."""
+    video_id = _video_id_of(url)
     log(f'farm: dispatching {FARM_OWNER}/{FARM_REPO} for {video_id}')
     res = _gh_api(
         f'/repos/{FARM_OWNER}/{FARM_REPO}/actions/workflows/'
@@ -285,6 +273,22 @@ def _download_with_farm(url, out_dir, budget_s=540):
     return None
 
 
+def _video_id_of(url):
+    return url.rstrip('/').split('/')[-1].split('?v=')[-1][:11]
+
+
+def _farm_pickup(url, out_dir):
+    """Cheap path: fetch an artifact produced by an earlier dispatch.
+    Never dispatches anything. Returns a local path or None."""
+    if not os.environ.get('CCE_GH_TOKEN'):
+        return None
+    os.makedirs(out_dir, exist_ok=True)
+    got = _farm_download_artifact(_video_id_of(url), out_dir)
+    if got:
+        log(f'DOWNLOADED (farm artifact): {got}')
+    return got
+
+
 def download(url, out_dir, max_height=720, attempts=4, spacing_s=15, timeout=60):
     """Download `url` with inbuilt ytagent; returns local path or None.
 
@@ -296,6 +300,10 @@ def download(url, out_dir, max_height=720, attempts=4, spacing_s=15, timeout=60)
     if not ensure_ytagent_cli():
         log('WARNING: ytagent-cli unavailable; will try yt-dlp only')
     ensure_pot()
+    # cheap first: an artifact from an earlier farm run may already exist
+    got = _farm_pickup(url, out_dir)
+    if got:
+        return got
     # when the farm is available, don't burn the step budget on direct
     # retries that keep failing the same way — reach the farm sooner
     if os.environ.get('CCE_GH_TOKEN') and attempts > 2:
@@ -315,9 +323,11 @@ def download(url, out_dir, max_height=720, attempts=4, spacing_s=15, timeout=60)
                 f'(throttles often lift with spacing)')
             time.sleep(spacing_s)
     # all direct methods failed — use the GitHub Actions download farm
-    path = _download_with_farm(url, out_dir)
-    if path:
-        return path
+    if not os.environ.get('CCE_GH_TOKEN'):
+        return None
+    got = _farm_dispatch_and_wait(url, out_dir)
+    if got:
+        return got
     return None
 
 
