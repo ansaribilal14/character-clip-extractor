@@ -233,6 +233,10 @@ def run_cli(name, vid, left):
                 log(f'farm pickup: {got} ({time.monotonic() - t:.0f}s)')
         except Exception as e:
             log(f'farm pickup error (continuing): {e}')
+        used = time.monotonic() - t
+        if not have_src and not have_norm and left - used < 90:
+            log('round budget consumed by pickup; CLI deferred to next round')
+            return 0
     env = dict(os.environ)
     env.update(load_secrets())
     env['CCE_VISITOR_TOKEN_FILE'] = os.path.join(

@@ -206,18 +206,41 @@ def _farm_download_artifact(video_id, out_dir):
     if not url:
         return None
     zpath = os.path.join(out_dir, f'farm_{video_id}.zip')
+    ppath = zpath + '.part'
     try:
         # requests strips the Authorization header on the cross-host redirect
-        # to blob storage; urllib keeps it and blob auth fails with 403
+        # to blob storage; urllib keeps it and blob auth fails with 403.
+        # Resumable: keep the .part across retries and continue with Range.
         import requests as _rq
-        with _rq.get(url, headers={'Authorization': f'token {token}',
-                                   'User-Agent': 'cce-farm-client'},
-                     stream=True, timeout=120) as r:
-            r.raise_for_status()
-            with open(zpath, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=1 << 20):
-                    if chunk:
-                        f.write(chunk)
+        ok = False
+        for attempt in range(4):
+            pos = os.path.getsize(ppath) if os.path.exists(ppath) else 0
+            headers = {'User-Agent': 'cce-farm-client'}
+            if pos:
+                headers['Range'] = f'bytes={pos}-'
+            else:
+                headers['Authorization'] = f'token {token}'
+            try:
+                with _rq.get(url, headers=headers, stream=True,
+                             timeout=(20, 90)) as r:
+                    r.raise_for_status()
+                    mode = 'ab' if pos else 'wb'
+                    with open(ppath, mode) as f:
+                        for chunk in r.iter_content(chunk_size=1 << 20):
+                            if chunk:
+                                f.write(chunk)
+                ok = True
+                break
+            except Exception as e:
+                log(f'zip download interrupted at '
+                    f'{os.path.getsize(ppath) if os.path.exists(ppath) else 0} '
+                    f'bytes: {e}')
+                time.sleep(3)
+        if not ok or not os.path.exists(ppath):
+            return None
+        if os.path.exists(zpath):
+            os.remove(zpath)
+        os.rename(ppath, zpath)
     except Exception as e:
         log(f'farm artifact download failed: {e}')
         try:
