@@ -512,4 +512,10 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    rc = main()
+    # Skip interpreter teardown: onnxruntime/insightface teardown can hang
+    # for minutes after killed CLI children, blowing the tool-call budget.
+    # All state files are already flushed (refcount-closed / with-blocks).
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(rc)
