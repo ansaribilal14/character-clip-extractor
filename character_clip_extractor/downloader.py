@@ -226,11 +226,10 @@ def _farm_download_artifact(video_id, out_dir):
         ok = False
         for attempt in range(4):
             pos = os.path.getsize(ppath) if os.path.exists(ppath) else 0
-            headers = {'User-Agent': 'cce-farm-client'}
+            headers = {'User-Agent': 'cce-farm-client',
+                       'Authorization': f'token {token}'}
             if pos:
                 headers['Range'] = f'bytes={pos}-'
-            else:
-                headers['Authorization'] = f'token {token}'
             try:
                 with _rq.get(url, headers=headers, stream=True,
                              timeout=(20, 90)) as r:
@@ -293,11 +292,10 @@ def _farm_release_download(video_id, out_dir):
     import requests as _rq
     for attempt in range(4):
         pos = os.path.getsize(ppath) if os.path.exists(ppath) else 0
-        headers = {'User-Agent': 'cce-farm-client'}
+        headers = {'User-Agent': 'cce-farm-client',
+                   'Authorization': f'token {token}'}
         if pos:
             headers['Range'] = f'bytes={pos}-'
-        else:
-            headers['Authorization'] = f'token {token}'
         try:
             with _rq.get(asset['browser_download_url'], headers=headers,
                          stream=True, timeout=(20, 120),
