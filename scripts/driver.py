@@ -268,6 +268,54 @@ def full_video_json(base):
     return None
 
 
+def is_zero_scene_episode(base):
+    """True when analysis ran to completion and found zero target scenes
+    (e.g. solo-member content): export plan exists with no windows."""
+    an = os.path.join(base, 'output', 'analysis')
+    ep = os.path.join(an, 'export_plan.json')
+    gp = os.path.join(an, 'grouped_scenes.json')
+    if not (os.path.exists(ep) and os.path.exists(gp)
+            and os.path.exists(os.path.join(an, 'qc.json'))):
+        return False
+    try:
+        plan = json.load(open(ep))
+        return len(plan.get('clips') or []) == 0
+    except Exception:
+        return False
+
+
+def finish_zero_episode(name, vid, title, s, reason):
+    """Complete an episode that honestly contains no target scenes."""
+    ep = s['episodes'].setdefault(name, {})
+    ep.update({'title': title, 'delivered': True, 'kind': 'none',
+               'url': '', 'size_mb': 0, 'delivered_at':
+                   time.strftime('%Y-%m-%d %H:%M'), 'note': reason})
+    save_status(s)
+    series = next((v for k, v in SERIES.items() if name.startswith(k)),
+                  'BABYMONSTER')
+    try:
+        delivery._tg('sendMessage', {
+            'chat_id': delivery.TG_CHAT,
+            'text': (f'ℹ️ {series} — {title}\n'
+                     f'No Ahyeon scenes detected in this video — nothing to '
+                     f'deliver.\nhttps://youtu.be/{vid}'),
+            'disable_web_page_preview': True})
+    except Exception:
+        pass
+    worklog_append(name, f'{series} — {title}', [
+        f'zero-scene episode: {reason}',
+        'raw visibility 0s / no grouped windows — honest negative result',
+        'nothing uploaded; state marked complete; disk reclaimed',
+    ])
+    for p in (os.path.join(base, 'output', 'source'),
+              os.path.join(base, 'output', 'analysis', 'normalized.mp4'),
+              os.path.join(base, 'output', 'clips')):
+        if os.path.isdir(p):
+            shutil.rmtree(p, ignore_errors=True)
+    push_data(f'batch data: {name} ({title}) DONE (zero target scenes)')
+    return True
+
+
 def full_video_path(base):
     fj = full_video_json(base)
     if fj and fj.get('full_video'):
@@ -491,6 +539,14 @@ def main():
                 continue
             rc = run_cli(name, vid, left)
             if rc != 0:
+                # a completed analysis with zero target scenes exits non-zero
+                # at 10_concat (assert: no exportable windows) — finish it
+                # honestly instead of retrying forever
+                if is_zero_scene_episode(base):
+                    finish_zero_episode(
+                        name, vid, title, s,
+                        'export plan has 0 windows (target not detected)')
+                    continue
                 ep['fail_count'] = fails + 1
                 save_status(s)
                 log(f'{name}: failed ({fails + 1}/4) — ending round, retry next round')
@@ -504,6 +560,10 @@ def main():
                     deliver_episode(name, vid, title, s)
                 else:
                     log(f'{name}: full video ready; delivery next round')
+            elif is_zero_scene_episode(base):
+                finish_zero_episode(
+                    name, vid, title, s,
+                    'export plan has 0 windows (target not detected)')
         if time.time() - t0 >= BUDGET_S:
             log('round budget exhausted; clean exit (re-run to continue)')
             return 0

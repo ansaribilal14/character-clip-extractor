@@ -11,6 +11,16 @@ thumbs = sorted(glob.glob(f'{OUTDIR}/scene_*.jpg'))
 CW, CH = 400, 225
 cols = 3
 rows = (len(thumbs) + cols - 1) // cols
+if not thumbs:
+    # zero-scene episode (target character not detected at all):
+    # write an honest placeholder sheet instead of crashing on an empty image
+    sheet = np.full((CH + 26, CW, 3), 250, np.uint8)
+    cv2.putText(sheet, f'NO {TARGET.upper()} SCENES DETECTED',
+                (20, CH // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+                (0, 0, 160), 2, cv2.LINE_AA)
+    cv2.imwrite(OUT, sheet, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    print('SHEET_OK 0 thumbs (placeholder) ->', OUT)
+    raise SystemExit(0)
 sheet = np.full((rows * (CH + 26), cols * CW, 3), 250, np.uint8)
 for i, t in enumerate(thumbs):
     img = cv2.imread(t)
