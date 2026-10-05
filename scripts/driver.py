@@ -286,6 +286,7 @@ def is_zero_scene_episode(base):
 
 def finish_zero_episode(name, vid, title, s, reason):
     """Complete an episode that honestly contains no target scenes."""
+    base = base_of(name)
     ep = s['episodes'].setdefault(name, {})
     ep.update({'title': title, 'delivered': True, 'kind': 'none',
                'url': '', 'size_mb': 0, 'delivered_at':
