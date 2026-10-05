@@ -28,7 +28,20 @@ SECRETS = '/home/z/my-project/.secrets'
 BUDGET_S = 380
 STEP_CAP = 320
 
+SERIES = {
+    'syt_': 'BABYMONSTER [SEE YOU THERE] TOUR BEHIND',
+    'hm_': 'BABYMONSTER [HELLO MONSTERS] BEHIND',
+    'nmc_': 'BABYMONSTER CHANNEL NON-MUSIC CONTENT',
+}
+
 EPISODES = [
+    # SEE YOU THERE tour behind (delivered ones are skipped via batch_status)
+    ('syt_01_seoul', 'SDxj3hDFOVI', 'SEOUL'),
+    ('syt_02_jakarta', '4NvYGr1YWr4', 'JAKARTA'),
+    ('syt_03_bangkok', '-Mu4eVoPmpc', 'BANGKOK'),
+    ('syt_04_kobe', 'hPkSSCk0pSY', 'KOBE'),
+    ('syt_05_sgtp', 'NNzhI2G8j7c', 'SINGAPORE & TAIPEI'),
+    ('syt_06_tokyo', '9G3BYRKujo8', 'TOKYO'),
     ('hm_01_ny3', 'iGjY31tyzUc', 'NY #3'),
     ('hm_02_japan1', 'RX5cXuenZ-Y', 'JAPAN #1'),
     ('hm_03_bonuspage', 'VOhQF_RNnis', 'BONUS PAGE'),
@@ -162,7 +175,9 @@ def deliver_episode(name, vid, title, s):
         log(f'{name}: full_video.json present but file missing — rerun 10_concat_full')
         return False
     size_mb = fj.get('size_mb') or os.path.getsize(fvp) / 1e6
-    cap = (f'BABYMONSTER [HELLO MONSTERS] BEHIND — {title}\n'
+    series = next((v for k, v in SERIES.items() if name.startswith(k)),
+                  'BABYMONSTER')
+    cap = (f'{series} — {title}\n'
            f'Ahyeon full-video cut · {fj.get("n_windows", "?")} windows · '
            f'{fj.get("duration_s", 0):.0f}s · {fj.get("resolution", "?")} · CRF16\n'
            f'https://youtu.be/{vid}')
@@ -189,7 +204,7 @@ def deliver_episode(name, vid, title, s):
                                          'delivery.json'), 'w'), indent=1)
     except OSError:
         pass
-    worklog_append(name, title, [
+    worklog_append(name, f'{series} — {title}', [
         f'delivered via {res.get("kind")}: {url or "(no url returned)"}',
         f'{fj.get("n_windows")} windows, {fj.get("duration_s", 0):.0f}s, '
         f'{fj.get("resolution")}, {size_mb:.1f} MB',
