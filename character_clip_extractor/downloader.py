@@ -276,6 +276,53 @@ def _farm_download_artifact(video_id, out_dir):
     return None
 
 
+def _farm_release_download(video_id, out_dir):
+    """Download the raw video from the farm repo's release mirror.
+    Release asset downloads bypass the artifact-zip rate limit."""
+    res = _gh_api(f'/repos/{FARM_OWNER}/{FARM_REPO}/releases/tags/vid-'
+                  f'{video_id}')
+    if not res or res[0] != 200:
+        return None
+    asset = next((a for a in res[1].get('assets', [])
+                  if a.get('name', '').startswith(f'video_{video_id}')), None)
+    if not asset:
+        return None
+    token = os.environ.get('CCE_GH_TOKEN', '')
+    fpath = os.path.join(out_dir, asset['name'])
+    ppath = fpath + '.part'
+    import requests as _rq
+    for attempt in range(4):
+        pos = os.path.getsize(ppath) if os.path.exists(ppath) else 0
+        headers = {'User-Agent': 'cce-farm-client'}
+        if pos:
+            headers['Range'] = f'bytes={pos}-'
+        else:
+            headers['Authorization'] = f'token {token}'
+        try:
+            with _rq.get(asset['browser_download_url'], headers=headers,
+                         stream=True, timeout=(20, 120),
+                         allow_redirects=True) as r:
+                r.raise_for_status()
+                with open(ppath, 'ab' if pos else 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=1 << 20):
+                        if chunk:
+                            f.write(chunk)
+            break
+        except Exception as e:
+            log(f'release download interrupted at '
+                f'{os.path.getsize(ppath) if os.path.exists(ppath) else 0} '
+                f'bytes: {e}')
+            time.sleep(3)
+    else:
+        return None
+    if os.path.exists(fpath):
+        os.remove(fpath)
+    os.rename(ppath, fpath)
+    ok, why = verify_file(fpath)
+    log(f'release candidate {asset["name"]}: {why}')
+    return fpath if ok else None
+
+
 def _farm_dispatch_and_wait(url, out_dir, budget_s=540):
     """Dispatch a farm run (if needed) and wait for its artifact."""
     video_id = _video_id_of(url)
@@ -328,12 +375,18 @@ def _video_id_of(url):
 
 
 def _farm_pickup(url, out_dir):
-    """Cheap path: fetch an artifact produced by an earlier dispatch.
+    """Cheap path: fetch a video produced by an earlier dispatch.
+    Prefers the unthrottled release mirror, falls back to the artifact.
     Never dispatches anything. Returns a local path or None."""
     if not os.environ.get('CCE_GH_TOKEN'):
         return None
     os.makedirs(out_dir, exist_ok=True)
-    got = _farm_download_artifact(_video_id_of(url), out_dir)
+    vid = _video_id_of(url)
+    got = _farm_release_download(vid, out_dir)
+    if got:
+        log(f'DOWNLOADED (farm release): {got}')
+        return got
+    got = _farm_download_artifact(vid, out_dir)
     if got:
         log(f'DOWNLOADED (farm artifact): {got}')
     return got
