@@ -10,7 +10,7 @@ ytagent (bilal140202/ytagent, MIT) is embedded as the primary download engine:
      A/V file is deleted and retried)
   5. last-resort fallback: direct yt-dlp with POT extractor args
 """
-import json, os, shutil, subprocess, sys, time, urllib.request
+import json, os, re, shutil, subprocess, sys, time, urllib.request
 
 POT_URL = 'http://127.0.0.1:4416'
 
@@ -143,9 +143,15 @@ def _download_with_ytagent(url, out_dir, max_height, timeout):
             for m in j.get('attempts', []):
                 log(f"  ytagent attempt: {m.get('method')} ok={m.get('ok')} "
                     f"{(m.get('reason') or '')[:70]}")
+                if BOT_CHECK_PAT.search(m.get('reason') or ''):
+                    globals()['BOT_CHECK_HIT'] = True
         except Exception:
             pass
     return None
+
+
+BOT_CHECK_PAT = re.compile(r"confirm you.?re not a bot|Sign in to confirm", re.I)
+BOT_CHECK_HIT = False
 
 
 def _download_with_ytdlp(url, out_dir, max_height, timeout):
@@ -159,7 +165,12 @@ def _download_with_ytdlp(url, out_dir, max_height, timeout):
            'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416',
            url]
     log('fallback: direct yt-dlp with POT')
-    subprocess.run(cmd, capture_output=True, text=True)
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    err = (p.stderr or '') + (p.stdout or '')
+    if BOT_CHECK_PAT.search(err):
+        global BOT_CHECK_HIT
+        BOT_CHECK_HIT = True
+        log('bot-check detected (yt-dlp): sign-in wall, direct is futile')
     return _pick_verified(out_dir)
 
 
@@ -357,6 +368,10 @@ def download(url, out_dir, max_height=720, attempts=4, spacing_s=15, timeout=60)
         if path:
             log(f'DOWNLOADED (yt-dlp fallback): {path}')
             return path
+        if BOT_CHECK_HIT:
+            log('bot-check confirmed — skipping remaining direct attempts, '
+                'going straight to the farm')
+            break
         if i < attempts:
             log(f'all methods failed; sleeping {spacing_s}s before retry '
                 f'(throttles often lift with spacing)')
