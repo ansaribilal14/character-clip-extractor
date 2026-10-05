@@ -25,8 +25,8 @@ WORKSPACES = os.path.join(REPO, 'workspaces')
 STATUS_FILE = os.path.join(WORKSPACES, 'batch_status.json')
 WORKLOG = '/home/z/my-project/worklog.md'
 SECRETS = '/home/z/my-project/.secrets'
-BUDGET_S = 360
-STEP_CAP = 300
+BUDGET_S = 330
+STEP_CAP = 240
 
 SERIES = {
     'syt_': 'BABYMONSTER [SEE YOU THERE] TOUR BEHIND',
