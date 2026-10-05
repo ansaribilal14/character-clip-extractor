@@ -25,8 +25,8 @@ WORKSPACES = os.path.join(REPO, 'workspaces')
 STATUS_FILE = os.path.join(WORKSPACES, 'batch_status.json')
 WORKLOG = '/home/z/my-project/worklog.md'
 SECRETS = '/home/z/my-project/.secrets'
-BUDGET_S = 380
-STEP_CAP = 320
+BUDGET_S = 360
+STEP_CAP = 300
 
 SERIES = {
     'syt_': 'BABYMONSTER [SEE YOU THERE] TOUR BEHIND',
@@ -184,8 +184,21 @@ def deliver_episode(name, vid, title, s):
     log(f'delivering {name} ({size_mb:.1f} MB) ...')
     res = delivery.deliver_auto(fvp, cap, keep=False)
     url = res.get('url') or ''
-    ok = bool(res.get('ok'))
+    # storage.to upload+confirm is the source of truth; a TG hiccup must not
+    # trigger a duplicate re-upload. Fallback-notify below instead.
+    ok = bool(res.get('ok')) or bool(url and res.get('filename'))
     log(f'delivery: kind={res.get("kind")} ok={ok} url={url}')
+    if url and not res.get('ok'):
+        try:
+            delivery._tg('sendMessage', {
+                'chat_id': delivery.TG_CHAT,
+                'text': (f"📁 <b>{res.get('filename')}</b>\n"
+                         f"💾 Size: {res.get('human_size', '?')}\n"
+                         f"⏳ Available until: {res.get('expires_at', 'n/a')}\n"
+                         f"⬇️ Download: {url}"),
+                'disable_web_page_preview': False})
+        except Exception:
+            pass
     if not ok:
         ep = s['episodes'].setdefault(name, {})
         ep['deliver_fail'] = int(ep.get('deliver_fail', 0)) + 1
