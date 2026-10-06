@@ -16,6 +16,7 @@ are injected into the environment before the delivery module is imported.
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -25,8 +26,8 @@ WORKSPACES = os.path.join(REPO, 'workspaces')
 STATUS_FILE = os.path.join(WORKSPACES, 'batch_status.json')
 WORKLOG = '/home/z/my-project/worklog.md'
 SECRETS = '/home/z/my-project/.secrets'
-BUDGET_S = 330
-STEP_CAP = 240
+BUDGET_S = 210
+STEP_CAP = 170
 
 SERIES = {
     'syt_': 'BABYMONSTER [SEE YOU THERE] TOUR BEHIND',
@@ -469,6 +470,7 @@ def run_cli(name, vid, left):
     proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True,
                             start_new_session=True)
+    _CHILD_PROC[0] = proc
     try:
         out, errbuf = proc.communicate(timeout=timeout)
         rc = proc.returncode
@@ -507,6 +509,25 @@ def status_table(s):
         print(f'{name:16} {title[:34]:34} {state:16} {ep.get("url") or "-"}')
 
 
+_CHILD_PROC = [None]
+
+def _on_term(signum, frame):
+    """SIGTERM: kill the running CLI child group and exit immediately.
+    Prevents orphaned children from holding inherited pipes open."""
+    try:
+        import signal as _s
+        p = _CHILD_PROC[0]
+        if p is not None and p.poll() is None:
+            try:
+                os.killpg(os.getpgid(p.pid), _s.SIGKILL)
+            except Exception:
+                pass
+    finally:
+        sys.stdout.flush()
+        os._exit(0)
+
+signal.signal(signal.SIGTERM, _on_term)
+
 def main():
     t0 = time.time()
     os.makedirs(WORKSPACES, exist_ok=True)
@@ -527,9 +548,9 @@ def main():
             log('round budget exhausted; clean exit (re-run to continue)')
             return 0
         if full_video_json(base):
-            if left < 300:
+            if left < 150:
                 log(f'{name}: full video ready, delivery deferred '
-                    f'(need ~300s, have {left:.0f}s)')
+                    f'(need ~150s, have {left:.0f}s)')
                 return 0
             deliver_episode(name, vid, title, s)
         else:
@@ -557,7 +578,7 @@ def main():
                 save_status(s)
             if full_video_json(base):
                 left = BUDGET_S - (time.time() - t0)
-                if left >= 300:
+                if left >= 150:
                     deliver_episode(name, vid, title, s)
                 else:
                     log(f'{name}: full video ready; delivery next round')
